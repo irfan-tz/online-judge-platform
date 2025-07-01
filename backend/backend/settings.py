@@ -1,13 +1,16 @@
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+# Frontend URL for password reset emails
+FRONTEND_URL = 'http://127.0.0.1:5173'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / '.env')
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-ry1yca!uhrh=w&=ykmr0jjn^zkix=!cqt7)$d7kgvsx2a7!y!3'
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -15,9 +18,9 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
 # Application definition
 
+SITE_ID = 1
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -28,8 +31,25 @@ INSTALLED_APPS = [
     'corsheaders',
     'strawberry.django',
     #'inventory',
-    'onlineJudge'
+    'onlineJudge',
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
 ]
+
+SOCIALACCOUNT_PROVIDERS = {
+    'google': {
+        'SCOPE': [
+            'profile',
+            'email',
+        ],
+        'AUTH_PARAMS': {
+            'access_type': 'online',
+        }
+    }
+}
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -40,6 +60,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'backend.urls'
@@ -63,12 +84,17 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 
 # Database
+SITE_ID = 1
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'mydb',          # or 'postgres'
+        'USER': 'myuser',
+        'PASSWORD': 'mypassword',
+        'HOST': 'localhost',
+        'PORT': '5432',
     }
 }
 
@@ -91,9 +117,26 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Email Configuration
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
+# For production: Use SMTP backend with Gmail
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+
+# Debug email configuration
+print(f"DEBUG: EMAIL_HOST_USER loaded: {'YES' if EMAIL_HOST_USER else 'NO'}")
+if EMAIL_HOST_USER:
+    print(f"DEBUG: EMAIL_HOST_USER value: {EMAIL_HOST_USER}")
+else:
+    print("DEBUG: EMAIL_HOST_USER is None - check your .env file")
+
+print(f"DEBUG: EMAIL_HOST_PASSWORD loaded: {'YES' if EMAIL_HOST_PASSWORD else 'NO'}")
+if not EMAIL_HOST_PASSWORD:
+    print("DEBUG: EMAIL_HOST_PASSWORD is None - check your .env file")
 
 LANGUAGE_CODE = 'en-us'
 
@@ -103,21 +146,21 @@ USE_I18N = True
 
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
-
 STATIC_URL = 'static/'
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite dev server default
     "http://127.0.0.1:5173",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+]
+
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'

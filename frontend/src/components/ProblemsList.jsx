@@ -32,9 +32,9 @@ const ProblemsList = () => {
               <h3>{problem.title}</h3>
               <p className="problem-description">{problem.description}</p>
               <div className="problem-limits">
-                <span className="time-limit">Time: {problem.timeLimit}ms</span>
+                <span className="time-limit">Time: {problem.timeLimit}</span>
                 <span className="memory-limit">
-                  Memory: {problem.memoryLimit}MB
+                  Memory: {problem.memoryLimit}
                 </span>
               </div>
             </div>

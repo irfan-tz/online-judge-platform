@@ -1,0 +1,233 @@
+.google-auth-container {
+  width: 100%;
+  margin: 1rem 0;
+}
+
+.google-auth-wrapper {
+  position: relative;
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.google-signin-button {
+  width: 100%;
+  transition: all 0.3s ease;
+}
+
+.google-signin-button.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.google-signin-button.loading {
+  opacity: 0.8;
+}
+
+.google-auth-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #f8f9fa;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  color: #4285f4;
+  font-weight: 500;
+  font-size: 0.95rem;
+  width: 100%;
+  box-sizing: border-box;
+  animation: pulse 2s ease-in-out infinite alternate;
+}
+
+.google-auth-loading .loading-spinner {
+  animation: spin 1s linear infinite;
+  font-size: 1.2rem;
+}
+
+.google-fallback-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border: 2px solid #dadce0;
+  border-radius: 12px;
+  color: #3c4043;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.google-fallback-button:hover:not(:disabled) {
+  background: #f8f9fa;
+  border-color: #c4c7c5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.google-fallback-button:active:not(:disabled) {
+  background: #f1f3f4;
+  transform: translateY(0);
+}
+
+.google-fallback-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.google-icon {
+  flex-shrink: 0;
+}
+
+.google-auth-warning {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fef5e7;
+  border: 1px solid #f6e05e;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.google-auth-warning p {
+  margin: 0 0 0.25rem 0;
+  color: #c53030;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.google-auth-warning small {
+  color: #744210;
+  font-size: 0.8rem;
+}
+
+/* Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  from {
+    background-color: #f8f9fa;
+  }
+  to {
+    background-color: #e3f2fd;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .google-auth-loading {
+    background: #374151;
+    border-color: #4a5568;
+    color: #60a5fa;
+  }
+
+  .google-fallback-button {
+    background: #374151;
+    border-color: #4a5568;
+    color: #f7fafc;
+  }
+
+  .google-fallback-button:hover:not(:disabled) {
+    background: #4a5568;
+    border-color: #718096;
+  }
+
+  .google-fallback-button:active:not(:disabled) {
+    background: #2d3748;
+  }
+
+  .google-auth-warning {
+    background: #2d1b1b;
+    border-color: #e53e3e;
+  }
+
+  .google-auth-warning p {
+    color: #fc8181;
+  }
+
+  .google-auth-warning small {
+    color: #fbb6ce;
+  }
+
+  @keyframes pulse {
+    from {
+      background-color: #374151;
+    }
+    to {
+      background-color: #1e3a8a;
+    }
+  }
+}
+
+/* Responsive design */
+@media (max-width: 480px) {
+  .google-auth-loading,
+  .google-fallback-button {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.9rem;
+  }
+
+  .google-icon {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .google-fallback-button {
+    border-width: 2px;
+    border-color: #000;
+  }
+
+  .google-auth-loading {
+    border-width: 2px;
+    border-color: #4285f4;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .google-auth-loading .loading-spinner {
+    animation: none;
+  }
+
+  .google-auth-loading {
+    animation: none;
+  }
+
+  .google-fallback-button:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* Focus styles for accessibility */
+.google-fallback-button:focus-visible {
+  outline: 2px solid #4285f4;
+  outline-offset: 2px;
+}
+
+/* Custom styling to override Google's default button styles */
+.google-signin-button > div {
+  width: 100% !important;
+}
+
+.google-signin-button iframe {
+  width: 100% !important;
+}
