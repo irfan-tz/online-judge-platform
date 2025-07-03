@@ -9,3 +9,4 @@ requests
 google-auth==2.23.4
 PyJWT==2.8.0
 dotenv
+django-taggit==6.1.0

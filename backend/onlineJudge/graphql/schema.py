@@ -1,6 +1,16 @@
 from typing import List, Optional
 import json
-import os
+import base64
+from django.db.models import Q, Count
+from django.db import models
+
+import time
+from django.core.cache import cache
+from django.http import HttpRequest
+from strawberry.types import Info
+from taggit.models import Tag
+
+
 
 import strawberry
 from strawberry import auto
@@ -8,7 +18,6 @@ import strawberry_django
 
 # For authentication
 from django.contrib.auth import get_user_model
-from django.contrib.auth import authenticate, login
 from google.auth.transport import requests
 from google.oauth2 import id_token
 from django.conf import settings
@@ -20,7 +29,8 @@ from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
-from django.urls import reverse
+
+#--------------------------PROBLEM--------------------------
 
 from onlineJudge.models import Problem
 
@@ -31,10 +41,145 @@ class ProblemType:
     description: auto
     time_limit: auto
     memory_limit: auto
+    difficulty: auto
+
+    @strawberry.field
+    def tags(self) -> list[str]:
+        return [tag.name for tag in self.tags.all()]
+
+@strawberry.type
+class PageInfo:
+    has_next_page: bool
+    has_previous_page: bool
+    start_cursor: Optional[str] = None
+    end_cursor: Optional[str] = None
+
+@strawberry.type
+class ProblemEdge:
+    node: ProblemType
+    cursor: str
+
+@strawberry.type
+class ProblemConnection:
+    edges: List[ProblemEdge]
+    page_info: PageInfo
+    total_count: int
+
+def encode_cursor(problem_id: int) -> str:
+    """Encode problem ID as cursor"""
+    return base64.b64encode(f"problem:{problem_id}".encode()).decode()
+
+def decode_cursor(cursor: str) -> Optional[int]:
+    """Decode cursor to get problem ID"""
+    try:
+        decoded = base64.b64decode(cursor.encode()).decode()
+        if decoded.startswith("problem:"):
+            return int(decoded.split(":")[1])
+    except (ValueError, IndexError):
+        pass
+    return None
 
 @strawberry.type
 class Query:
-    problems: List[ProblemType] = strawberry_django.field()
+    @strawberry.field
+    def problems(
+        self,
+        first: Optional[int] = 10,
+        after: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        difficulty: Optional[str] = None,
+        search: Optional[str] = None
+    ) -> ProblemConnection:
+        """Get problems with cursor-based pagination and filtering"""
+
+        queryset = Problem.objects.all()
+
+        if tags:
+            queryset = queryset.filter(tags__name__in=tags).distinct()
+
+        if difficulty:
+            queryset = queryset.filter(difficulty=difficulty)
+
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) | Q(description__icontains=search)
+            )
+
+        total_count = queryset.count()
+
+        if after:
+            cursor_id = decode_cursor(after)
+            if cursor_id:
+                queryset = queryset.filter(id__gt=cursor_id)
+
+        queryset = queryset.order_by('id')
+        limit = min(first or 10, 100)
+        problems = list(queryset[:limit + 1])
+        has_next_page = len(problems) > limit
+        if has_next_page:
+            problems = problems[:-1]
+
+        edges = [
+            ProblemEdge(
+                node=problem,
+                cursor=encode_cursor(problem.id)
+            )
+            for problem in problems
+        ]
+
+        page_info = PageInfo(
+            has_next_page=has_next_page,
+            has_previous_page=after is not None,
+            start_cursor=edges[0].cursor if edges else None,
+            end_cursor=edges[-1].cursor if edges else None
+        )
+
+        return ProblemConnection(
+            edges=edges,
+            page_info=page_info,
+            total_count=total_count
+        )
+
+    @strawberry.field
+    def all_tags(self) -> List[str]:
+        """Get all available tags across all problems"""
+        used_tags = Tag.objects.filter(
+            taggit_taggeditem_items__content_type__model='problem'
+        ).distinct().values_list('name', flat=True)
+        return sorted(list(used_tags))
+
+    @strawberry.field
+    def suggest_tags(self, info: Info, search: str) -> List[str]:
+        """Return tag suggestions, throttled + cached"""
+
+        # --- THROTTLING ---
+        request: HttpRequest = info.context["request"]
+        ip = request.META.get("REMOTE_ADDR", "unknown")
+        throttle_key = f"throttle_suggest:{ip}"
+        last_time = cache.get(throttle_key)
+
+        if last_time and time.time() - last_time < 0.5:  # 500ms window
+            raise Exception("Too many requests. Please wait a moment.")
+
+        cache.set(throttle_key, time.time(), timeout=1)
+
+        # --- CACHING RESULTS ---
+        cache_key = f"suggest_tags:{search.lower()}"
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result
+
+        tags = list(
+            Tag.objects.filter(name__icontains=search)
+            .order_by("name")
+            .values_list("name", flat=True)[:10]
+        )
+
+        cache.set(cache_key, tags, timeout=60)
+        return tags
+
+
+#--------------------------AUTHENTICATION--------------------------
 
 User = get_user_model()
 
