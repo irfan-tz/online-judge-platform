@@ -1,8 +1,7 @@
 from typing import List, Optional
 import json
 import base64
-from django.db.models import Q, Count
-from django.db import models
+from django.db.models import Q
 
 import time
 from django.core.cache import cache
@@ -10,14 +9,12 @@ from django.http import HttpRequest
 from strawberry.types import Info
 from taggit.models import Tag
 
-
-
 import strawberry
 from strawberry import auto
 import strawberry_django
 
 # For authentication
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
 from google.auth.transport import requests
 from google.oauth2 import id_token
 from django.conf import settings
@@ -34,6 +31,17 @@ from django.utils.encoding import force_bytes, force_str
 
 from onlineJudge.models import Problem
 
+@strawberry.type
+class ExampleType:
+    input: str
+    output: str
+    explanation: Optional[str] = None
+
+@strawberry.type
+class DefaultCodeType:
+    language: str
+    code: str
+
 @strawberry_django.type(Problem)
 class ProblemType:
     id: auto
@@ -42,10 +50,36 @@ class ProblemType:
     time_limit: auto
     memory_limit: auto
     difficulty: auto
+    constraints: auto
+    hints: auto
 
     @strawberry.field
     def tags(self) -> list[str]:
         return [tag.name for tag in self.tags.all()]
+
+    @strawberry.field
+    def examples(self) -> List[ExampleType]:
+        """Return examples as structured data"""
+        if not self.examples:
+            return []
+        return [
+            ExampleType(
+                input=example.get('input', ''),
+                output=example.get('output', ''),
+                explanation=example.get('explanation')
+            )
+            for example in self.examples
+        ]
+
+    @strawberry.field
+    def default_code(self) -> List[DefaultCodeType]:
+        """Return default code templates for different languages"""
+        if not self.default_code:
+            return []
+        return [
+            DefaultCodeType(language=lang, code=code)
+            for lang, code in self.default_code.items()
+        ]
 
 @strawberry.type
 class PageInfo:
@@ -81,6 +115,14 @@ def decode_cursor(cursor: str) -> Optional[int]:
 
 @strawberry.type
 class Query:
+    @strawberry.field
+    def problem(self, id: strawberry.ID) -> Optional[ProblemType]:
+        """Get a single problem by ID"""
+        try:
+            return Problem.objects.get(id=id)
+        except Problem.DoesNotExist:
+            return None
+
     @strawberry.field
     def problems(
         self,

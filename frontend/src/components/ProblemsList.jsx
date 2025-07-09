@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useQuery, useLazyQuery, gql } from "@apollo/client";
+import { useNavigate } from "react-router-dom";
 import debounce from "lodash/debounce";
 import "./ProblemsList.css";
 
@@ -38,6 +39,7 @@ const SUGGEST_TAGS = gql`
 `;
 
 const ProblemsList = () => {
+  const navigate = useNavigate();
   const [pageSize] = useState(10);
   const [cursors, setCursors] = useState([null]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
@@ -146,6 +148,10 @@ const ProblemsList = () => {
     setSelectedTags(prev =>
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     );
+  };
+
+  const handleProblemClick = (problemId) => {
+    navigate(`/problem/${problemId}`);
   };
 
   const difficulties = ["Easy", "Medium", "Hard"];
@@ -293,7 +299,20 @@ const ProblemsList = () => {
       ) : (
         <main className="problems-list scroll-panel" role="main" aria-label="Problems list">
           {problems.map(problem => (
-            <article key={problem.id} className="problem-card" tabIndex="0" role="article">
+            <article 
+              key={problem.id} 
+              className="problem-card" 
+              tabIndex="0" 
+              role="article"
+              onClick={() => handleProblemClick(problem.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleProblemClick(problem.id);
+                }
+              }}
+              aria-label={`View problem ${problem.id}: ${problem.title}`}
+            >
               <header className="problem-header">
                 <h3 className="problem-title">{problem.id}. {problem.title}</h3>
                 <div 
