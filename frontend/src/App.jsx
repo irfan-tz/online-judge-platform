@@ -10,8 +10,12 @@ import ProblemsList from "./components/ProblemsList";
 import Navbar from "./components/Navbar";
 import AuthSetupCheck from "./components/AuthSetupCheck";
 import { SignIn, Register, ForgotPassword, ResetPassword } from "./pages/auth";
-import { AuthProvider } from "./contexts/AuthContext";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ProblemDetails from "./pages/ProblemDetails";
+import AdminAuth from "./pages/auth/AdminAuth";
+import AdminRoute from "./components/AdminRoute";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminCreateProblem from "./AdminCreateProblem";
 
 function App() {
   return (
@@ -45,11 +49,11 @@ function App() {
                   </div>
                 }
               />
-              <Route path="/auth/setup" element={
+              {/* <Route path="/auth/setup" element={
                 <div className="full-width-content">
                   <AuthSetupCheck />
                 </div>
-              } />
+              } /> */}
 
               {/* Main application routes */}
               <Route path="/" element={
@@ -59,6 +63,7 @@ function App() {
                   </header>
                   <section className="content-wrapper">
                     <ProblemsList />
+                    {/* <AuthSetupCheck /> */}
                   </section>
                 </div>
               } />
@@ -70,6 +75,27 @@ function App() {
                 <div className="content-wrapper">
                   <ProblemDetails />
                 </div>
+              } />
+
+              {/* Admin routes */}
+              <Route path="/admin" element={
+                <div className="full-width-content">
+                  <AdminAuth />
+                </div>
+              } />
+              <Route path="/admin/dashboard" element={
+                <AdminRoute>
+                  <div className="content-wrapper">
+                    <AdminDashboard />
+                  </div>
+                </AdminRoute>
+              } />
+              <Route path="/admin/problems/create" element={
+                <AdminRoute>
+                  <div className="content-wrapper">
+                    <AdminCreateProblem />
+                  </div>
+                </AdminRoute>
               } />
             </Routes>
           </main>

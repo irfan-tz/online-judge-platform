@@ -3,7 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import "./Navbar.css";
 
 const Navbar = () => {
-  const { user, isAuthenticated, logout, isLoading } = useAuth();
+  const { user, isAuthenticated, logout, isLoading, isAdmin } = useAuth();
   const location = useLocation();
 
   const handleLogout = () => {
@@ -70,6 +70,7 @@ const Navbar = () => {
                     {user?.firstName
                       ? `${user.firstName} ${user.lastName || ""}`.trim()
                       : user?.username || "User"}
+                    {isAdmin && <span className="admin-badge">Admin</span>}
                   </span>
                   <span className="user-email">{user?.email}</span>
                 </div>
@@ -81,6 +82,11 @@ const Navbar = () => {
                 <Link to="/submissions" className="user-action-link">
                   Submissions
                 </Link>
+                {isAdmin && (
+                  <Link to="/admin/dashboard" className="user-action-link admin-link">
+                    Admin Dashboard
+                  </Link>
+                )}
                 <button onClick={handleLogout} className="logout-button">
                   Logout
                 </button>

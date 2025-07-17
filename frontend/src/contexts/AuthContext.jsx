@@ -5,7 +5,9 @@ import Cookies from "js-cookie";
 const initialState = {
   user: null,
   token: null,
+  adminToken: null,
   isAuthenticated: false,
+  isAdmin: false,
   isLoading: true,
   error: null,
 };
@@ -34,7 +36,9 @@ const authReducer = (state, action) => {
         ...state,
         user: action.payload.user,
         token: action.payload.token,
+        adminToken: action.payload.adminToken || null,
         isAuthenticated: true,
+        isAdmin: !!action.payload.adminToken,
         isLoading: false,
         error: null,
       };
@@ -44,7 +48,9 @@ const authReducer = (state, action) => {
         ...state,
         user: null,
         token: null,
+        adminToken: null,
         isAuthenticated: false,
+        isAdmin: false,
         isLoading: false,
         error: action.payload,
       };
@@ -54,7 +60,9 @@ const authReducer = (state, action) => {
         ...state,
         user: null,
         token: null,
+        adminToken: null,
         isAuthenticated: false,
+        isAdmin: false,
         isLoading: false,
         error: null,
       };
@@ -88,13 +96,14 @@ export const AuthProvider = ({ children }) => {
     const initializeAuth = () => {
       try {
         const token = localStorage.getItem("token") || Cookies.get("token");
+        const adminToken = localStorage.getItem("adminToken") || Cookies.get("adminToken");
         const userStr = localStorage.getItem("user") || Cookies.get("user");
 
         if (token && userStr) {
           const user = JSON.parse(userStr);
           dispatch({
             type: AUTH_ACTIONS.LOGIN_SUCCESS,
-            payload: { user, token },
+            payload: { user, token, adminToken },
           });
         } else {
           dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
@@ -114,19 +123,26 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = (userData) => {
     try {
-      const { user, token } = userData;
+      const { user, token, adminToken } = userData;
+
+      // Ensure user has isStaff flag when admin token is present
+      const enhancedUser = adminToken 
+        ? { ...user, isStaff: true } 
+        : user;
 
       // Store in localStorage
       localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("adminToken", adminToken || "");
+      localStorage.setItem("user", JSON.stringify(enhancedUser));
 
       // Store in cookies (for server-side access)
       Cookies.set("token", token, { expires: 7, secure: true, sameSite: "strict" });
-      Cookies.set("user", JSON.stringify(user), { expires: 7, secure: true, sameSite: "strict" });
+      Cookies.set("adminToken", adminToken || "", { expires: 7, secure: true, sameSite: "strict" });
+      Cookies.set("user", JSON.stringify(enhancedUser), { expires: 7, secure: true, sameSite: "strict" });
 
       dispatch({
         type: AUTH_ACTIONS.LOGIN_SUCCESS,
-        payload: { user, token },
+        payload: { user: enhancedUser, token, adminToken },
       });
 
       return { success: true };
@@ -144,10 +160,12 @@ export const AuthProvider = ({ children }) => {
     try {
       // Clear localStorage
       localStorage.removeItem("token");
+      localStorage.removeItem("adminToken");
       localStorage.removeItem("user");
 
       // Clear cookies
       Cookies.remove("token");
+      Cookies.remove("adminToken");
       Cookies.remove("user");
 
       dispatch({ type: AUTH_ACTIONS.LOGOUT });
@@ -229,7 +247,9 @@ export const AuthProvider = ({ children }) => {
     // State
     user: state.user,
     token: state.token,
+    adminToken: state.adminToken,
     isAuthenticated: state.isAuthenticated,
+    isAdmin: state.isAdmin,
     isLoading: state.isLoading,
     error: state.error,
 
@@ -262,7 +282,13 @@ export const useAuth = () => {
 // HOC for protected routes
 export const withAuth = (Component) => {
   return function AuthenticatedComponent(props) {
-    const { isAuthenticated, isLoading } = useAuth();
+    const { isAuthenticated, isLoading, user } = useAuth();
+
+    // Extract the current URL path
+    const currentPath = window.location.pathname;
+
+    // Check if the URL contains /admin
+    const isAdminPath = currentPath.includes("/admin");
 
     if (isLoading) {
       return (
@@ -280,6 +306,19 @@ export const withAuth = (Component) => {
           <p>Please sign in to access this page.</p>
           <a href="/auth/signin" className="auth-link">
             Go to Sign In
+          </a>
+        </div>
+      );
+    }
+
+    // If the URL contains /admin, check if the user is a staff member
+    if (isAdminPath && !user?.isStaff) {
+      return (
+        <div className="auth-required">
+          <h2>Access Denied</h2>
+          <p>You must be a staff member to access this page.</p>
+          <a href="/" className="auth-link">
+            Go to Home
           </a>
         </div>
       );

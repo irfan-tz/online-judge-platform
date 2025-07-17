@@ -1,27 +1,79 @@
+version: '3.8'
 services:
-  db-postgres:
-    image: postgres
+  db:
+    image: postgres:16
+    volumes:
+      - pgdata:/var/lib/postgresql/data/
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: mydb
+      - POSTGRES_DB=mydb
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
     ports:
       - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  db-mongo:
-    image: mongo
+  backend-migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: password
-    ports:
-      - "27017:27017"
+      - DB_HOST=db
+      - DJANGO_SUPERUSER_USERNAME=${DJANGO_SUPERUSER_USERNAME:-admin}
+      - DJANGO_SUPERUSER_EMAIL=${DJANGO_SUPERUSER_EMAIL:-admin@example.com}
+      - DJANGO_SUPERUSER_PASSWORD=${DJANGO_SUPERUSER_PASSWORD:-admin123}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+      python manage.py makemigrations &&
+      python manage.py migrate &&
+      python manage.py shell -c 'import os; from django.contrib.auth import get_user_model; User = get_user_model(); username = os.environ.get(\"DJANGO_SUPERUSER_USERNAME\", \"admin\"); email = os.environ.get(\"DJANGO_SUPERUSER_EMAIL\", \"admin@example.com\"); password = os.environ.get(\"DJANGO_SUPERUSER_PASSWORD\", \"admin123\"); User.objects.filter(username=username).exists() or User.objects.create_superuser(username, email, password); print(f\"Superuser {username} ready\")'
+      "
     volumes:
-      - mongodata:/data/db
-    restart: unless-stopped
+      - ./backend:/app
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - COMPILER_URL=http://compiler:8080
+    depends_on:
+      - backend-migrate
+    command: python manage.py runserver 0.0.0.0:8000
+
+  compiler:
+    build:
+      context: ./compiler
+      dockerfile: Compiler.Dockerfile
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile_inline: |
+        FROM node:18
+        WORKDIR /app
+        COPY package*.json ./
+        RUN npm install
+        COPY . .
+        EXPOSE 5173
+        CMD ["npm", "run", "dev", "--", "--host"]
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
 
 volumes:
   pgdata:
-  mongodata:

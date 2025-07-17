@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 
 # Frontend URL for password reset emails
 FRONTEND_URL = 'http://127.0.0.1:5173'
+COMPILER_URL = os.getenv('COMPILER_URL', 'http://localhost:8080')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 
@@ -94,7 +95,7 @@ DATABASES = {
         'NAME': 'mydb',          # or 'postgres'
         'USER': 'myuser',
         'PASSWORD': 'mypassword',
-        'HOST': 'localhost',
+        'HOST': 'db',
         'PORT': '5432',
     }
 }
@@ -154,6 +155,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite dev server default
     "http://127.0.0.1:5173",
+    "http://172.18.0.4:5173",
 ]
 
 CORS_ALLOW_CREDENTIALS = True

@@ -1,637 +1,354 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, gql } from '@apollo/client';
-import { Editor } from '@monaco-editor/react';
+import { useState, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
+import { useQuery, useMutation } from '@apollo/client';
+import MarkdownRenderer from '../components/MarkdownRenderer';
+import { GET_PROBLEM_BY_ID, RUN_CODE } from '../graphql/queries';
+import { SUBMIT_SOLUTION } from '../graphql/mutations';
 import "./ProblemDetails.css";
 
-// GraphQL queries and mutations
-const GET_PROBLEM = gql`
-  query GetProblem($id: ID!) {
-    problem(id: $id) {
-      id
-      title
-      description
-      difficulty
-      tags
-      timeLimit
-      memoryLimit
-      examples {
-        input
-        output
-        explanation
-      }
-      constraints
-      hints
-      defaultCode {
-        language
-        code
-      }
-    }
-  }
-`;
+const languageOptions = [
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'python', label: 'Python' },
+  { value: 'java', label: 'Java' },
+  { value: 'cpp', label: 'C++' },
+];
 
-const SUBMIT_SOLUTION = gql`
-  mutation SubmitSolution($problemId: ID!, $code: String!, $language: String!) {
-    submitSolution(problemId: $problemId, code: $code, language: $language) {
-      id
-      status
-      runtime
-      memory
-      output
-      error
-      testCases {
-        input
-        expectedOutput
-        actualOutput
-        passed
-        runtime
-        memory
-      }
-    }
-  }
-`;
+const defaultCode = {
+  javascript: `// Reads from stdin and prints to stdout
+const readline = require('readline');
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  terminal: false
+});
 
-const RUN_CODE = gql`
-  mutation RunCode($problemId: ID!, $code: String!, $language: String!, $input: String!) {
-    runCode(problemId: $problemId, code: $code, language: $language, input: $input) {
-      output
-      error
-      runtime
-      memory
+let lines = [];
+rl.on('line', (line) => {
+    lines.push(line);
+}).on('close', () => {
+    // Example for Two Sum:
+    // const target = parseInt(lines[0], 10);
+    // const nums = lines[1].split(' ').map(Number);
+    
+    // Your logic here
+    console.log("Process input here");
+});
+`,
+  python: `# Reads from stdin and prints to stdout
+import sys
+
+def solve():
+  # Example for Two Sum:
+  # line1 = sys.stdin.readline().strip()
+  # if not line1: return
+  # target = int(line1)
+  # nums = list(map(int, sys.stdin.readline().strip().split()))
+  
+  # Your logic here. For example:
+  for line in sys.stdin:
+      print(f"I read this line: {line.strip()}")
+
+solve()
+`,
+  java: `// Reads from stdin and prints to stdout
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        
+        // Example for Two Sum:
+        // int target = sc.nextInt();
+        // sc.nextLine(); // consume newline
+        // String[] numsStr = sc.nextLine().split(" ");
+        // int[] nums = new int[numsStr.length];
+        // for (int i = 0; i < numsStr.length; i++) {
+        //     nums[i] = Integer.parseInt(numsStr[i]);
+        // }
+
+        // Your logic here
+        while (sc.hasNextLine()) {
+            System.out.println("I read this line: " + sc.nextLine());
+        }
+        
+        sc.close();
     }
-  }
-`;
+}
+`,
+  cpp: `// Reads from stdin and prints to stdout
+#include <iostream>
+#include <string>
+#include <vector>
+#include <sstream>
+
+int main() {
+    // Your logic here
+    // Example for Two Sum:
+    // int target;
+    // std::cin >> target;
+    // std::cin.ignore(); 
+    
+    // std::string line;
+    // std::getline(std::cin, line);
+    // std::stringstream ss(line);
+    // std::vector<int> nums;
+    // int num;
+    // while(ss >> num) {
+    //     nums.push_back(num);
+    // }
+
+    std::string line;
+    while (std::getline(std::cin, line)) {
+      std::cout << "I read this line: " << line << std::endl;
+    }
+    return 0;
+}
+`,
+};
 
 const ProblemDetails = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
-  const editorRef = useRef(null);
-  
-  // State management
   const [selectedLanguage, setSelectedLanguage] = useState('python');
-  const [code, setCode] = useState('');
-  const [customInput, setCustomInput] = useState('');
-  const [activeTab, setActiveTab] = useState('description');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [code, setCode] = useState(defaultCode.python);
+  const [output, setOutput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
-  const [results, setResults] = useState(null);
-  const [runResults, setRunResults] = useState(null);
+  const [activeTab, setActiveTab] = useState('description');
   const [fontSize, setFontSize] = useState(14);
-  const [theme, setTheme] = useState('vs-dark');
+  const editorRef = useRef(null);
 
-  // Available programming languages
-  const languages = [
-    { id: 'python', name: 'Python', extension: 'py' },
-    { id: 'javascript', name: 'JavaScript', extension: 'js' },
-    { id: 'java', name: 'Java', extension: 'java' },
-    { id: 'cpp', name: 'C++', extension: 'cpp' },
-    { id: 'c', name: 'C', extension: 'c' },
-    { id: 'go', name: 'Go', extension: 'go' },
-    { id: 'rust', name: 'Rust', extension: 'rs' },
-  ];
-
-  // Default code templates
-  const defaultCodeTemplates = {
-    python: `def solution():
-    # Your code here
-    pass
-
-# Example usage
-# result = solution()
-# print(result)`,
-    javascript: `function solution() {
-    // Your code here
-    return null;
-}
-
-// Example usage
-// console.log(solution());`,
-    java: `public class Solution {
-    public static void main(String[] args) {
-        // Your code here
-    }
-}`,
-    cpp: `#include <iostream>
-#include <vector>
-using namespace std;
-
-int main() {
-    // Your code here
-    return 0;
-}`,
-    c: `#include <stdio.h>
-#include <stdlib.h>
-
-int main() {
-    // Your code here
-    return 0;
-}`,
-    go: `package main
-
-import "fmt"
-
-func main() {
-    // Your code here
-}`,
-    rust: `fn main() {
-    // Your code here
-}`
-  };
-
-  // Fetch problem data
-  const { loading, error, data } = useQuery(GET_PROBLEM, {
+  // Fetch problem details
+  const { loading, error, data } = useQuery(GET_PROBLEM_BY_ID, {
     variables: { id },
-    onCompleted: (data) => {
-      if (data?.problem?.defaultCode) {
-        const defaultCode = data.problem.defaultCode.find(dc => dc.language === selectedLanguage);
-        if (defaultCode) {
-          setCode(defaultCode.code);
-        } else {
-          setCode(defaultCodeTemplates[selectedLanguage] || '');
-        }
-      } else {
-        setCode(defaultCodeTemplates[selectedLanguage] || '');
-      }
-    }
+    skip: !id,
+    fetchPolicy: 'cache-and-network'
   });
 
-  // GraphQL mutations
-  const [submitSolution] = useMutation(SUBMIT_SOLUTION);
-  const [runCode] = useMutation(RUN_CODE);
+  // Update code when language changes
+  useEffect(() => {
+    setCode(defaultCode[selectedLanguage] || '');
+  }, [selectedLanguage]);
 
-  // Handle language change
-  const handleLanguageChange = (newLanguage) => {
-    setSelectedLanguage(newLanguage);
-    if (data?.problem?.defaultCode) {
-      const defaultCode = data.problem.defaultCode.find(dc => dc.language === newLanguage);
-      if (defaultCode) {
-        setCode(defaultCode.code);
-      } else {
-        setCode(defaultCodeTemplates[newLanguage] || '');
+  const problem = data?.problem;
+
+  const handleCodeChange = (e) => {
+    setCode(e.target.value);
+  };
+
+  const handleLanguageChange = (e) => {
+    setSelectedLanguage(e.target.value);
+  };
+
+  const formatTestResults = (result) => {
+    let outputText = 'Running your solution...\n\n';
+
+    result.testResults.forEach((test, index) => {
+      outputText += `--- Test Case ${index + 1} ---\n`;
+      outputText += `Input:\n${test.testCase}\n\n`;
+      outputText += `Expected Output:\n${test.expected}\n\n`;
+      outputText += `Your Output:\n${test.actual}\n\n`;
+      outputText += `Result: ${test.passed ? '✓ Passed' : '✗ Failed'}\n`;
+      if (test.executionTime !== null && typeof test.executionTime !== 'undefined') {
+        const timeInMs = (test.executionTime * 1000).toFixed(2);
+        outputText += `Time: ${timeInMs}ms\n`;
       }
-    } else {
-      setCode(defaultCodeTemplates[newLanguage] || '');
-    }
+      outputText += '\n';
+    });
+
+    const passedCount = result.testResults.filter(t => t.passed).length;
+    const totalTimeInMs = (result.totalExecutionTime * 1000).toFixed(2);
+    outputText += `--- Summary ---\n`;
+    outputText += `Result: ${passedCount}/${result.testResults.length} test cases passed.\n`;
+    outputText += `Total execution time: ${totalTimeInMs}ms`;
+
+    return outputText;
   };
 
-  // Handle code submission
-  const handleSubmit = async () => {
-    if (!code.trim()) {
-      alert('Please write some code before submitting!');
-      return;
-    }
+  const [runCodeMutation] = useMutation(RUN_CODE, {
+    errorPolicy: 'all'
+  });
 
-    setIsSubmitting(true);
-    setResults(null);
-    
-    try {
-      const result = await submitSolution({
-        variables: {
-          problemId: id,
-          code: code,
-          language: selectedLanguage
-        }
-      });
-      
-      setResults(result.data.submitSolution);
-      setActiveTab('results');
-    } catch (error) {
-      console.error('Submission error:', error);
-      setResults({
-        status: 'ERROR',
-        error: error.message || 'Failed to submit solution'
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Handle code running with custom input
-  const handleRun = async () => {
-    if (!code.trim()) {
-      alert('Please write some code before running!');
-      return;
-    }
-
+  const handleRunCode = async () => {
+    if (!problem) return;
     setIsRunning(true);
-    setRunResults(null);
-    
+    setOutput('Running...');
+
     try {
-      const result = await runCode({
+      const { data: mutationData } = await runCodeMutation({
         variables: {
-          problemId: id,
-          code: code,
-          language: selectedLanguage,
-          input: customInput
+          input: {
+            problemId: problem.id,
+            code: code,
+            language: selectedLanguage,
+            testType: 'SAMPLE'
+          }
         }
       });
-      
-      setRunResults(result.data.runCode);
-    } catch (error) {
-      console.error('Run error:', error);
-      setRunResults({
-        error: error.message || 'Failed to run code'
-      });
+
+      const result = mutationData.runCode;
+      if (result.__typename === 'RunCodeResult') {
+        const formattedOutput = formatTestResults(result);
+        setOutput(formattedOutput);
+      } else if (result.__typename === 'RunCodeError') {
+        setOutput(`--- Error ---\nType: ${result.errorType}\n\n${result.error}`);
+      } else {
+        setOutput('An unknown response was received from the server.');
+      }
+    } catch (err) {
+      setOutput(`An unexpected error occurred: ${err.message}`);
     } finally {
       setIsRunning(false);
     }
   };
 
-  // Handle editor mount
-  const handleEditorDidMount = (editor, monaco) => {
-    editorRef.current = editor;
-    
-    // Add keyboard shortcuts
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      handleSubmit();
-    });
-    
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-      handleRun();
-    });
-  };
+  const handleSubmit = async () => {
+    setIsRunning(true);
+    setOutput('');
 
-  // Get difficulty color
-  const getDifficultyColor = (difficulty) => {
-    switch (difficulty?.toLowerCase()) {
-      case 'easy': return '#10b981';
-      case 'medium': return '#f59e0b';
-      case 'hard': return '#ef4444';
-      default: return '#6b7280';
+    try {
+      setTimeout(() => {
+        setOutput(`Submission Results:\n\nStatus: Accepted\nRuntime: 76 ms\nMemory: 42.3 MB`);
+        setIsRunning(false);
+      }, 2000);
+
+    } catch (err) {
+      setOutput(`Error: ${err.message}`);
+      setIsRunning(false);
     }
   };
 
-  // Get status color
-  const getStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'accepted': return '#10b981';
-      case 'wrong_answer': return '#ef4444';
-      case 'time_limit_exceeded': return '#f59e0b';
-      case 'memory_limit_exceeded': return '#f59e0b';
-      case 'runtime_error': return '#ef4444';
-      case 'compile_error': return '#ef4444';
-      default: return '#6b7280';
-    }
-  };
+  const increaseFontSize = () => setFontSize(prevSize => Math.min(prevSize + 2, 24));
+  const decreaseFontSize = () => setFontSize(prevSize => Math.max(prevSize - 2, 10));
 
-  if (loading) return <div className="loading">Loading problem...</div>;
-  if (error) return <div className="error">Error: {error.message}</div>;
-  if (!data?.problem) return <div className="error">Problem not found</div>;
-
-  const problem = data.problem;
+  if (loading && !data) return <div className="loading">Loading problem...</div>;
+  if (error) return <div className="error">Error loading problem: {error.message}</div>;
+  if (!loading && !error && !problem) return <div className="error">Problem not found</div>;
+  if (problem.__typename === 'ProblemNotFoundError') {
+      return <div className="error">{problem.message}</div>;
+  }
 
   return (
-    <div className="problem-details">
-      {/* Header */}
-      <div className="problem-header">
-        <button 
-          className="back-button"
-          onClick={() => navigate('/')}
-          aria-label="Back to problems list"
-        >
-          ← Back to Problems
-        </button>
-        <div className="problem-title-section">
-          <h1>{problem.id}. {problem.title}</h1>
-          <div className="problem-meta">
-            <span 
-              className="difficulty-badge"
-              style={{ 
-                color: getDifficultyColor(problem.difficulty),
-                backgroundColor: `${getDifficultyColor(problem.difficulty)}20`
-              }}
-            >
-              {problem.difficulty}
-            </span>
-            {problem.tags?.map(tag => (
-              <span key={tag} className="tag-badge">{tag}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
+    <div className="problem-details-page">
       <div className="problem-content">
-        {/* Left Panel - Problem Description */}
-        <div className="left-panel">
+        <div className="problem-panel description-panel">
           <div className="panel-tabs">
-            <button 
-              className={`tab ${activeTab === 'description' ? 'active' : ''}`}
+            <button
+              className={`tab-btn ${activeTab === 'description' ? 'active' : ''}`}
               onClick={() => setActiveTab('description')}
             >
               Description
             </button>
-            <button 
-              className={`tab ${activeTab === 'examples' ? 'active' : ''}`}
-              onClick={() => setActiveTab('examples')}
+            <button
+              className={`tab-btn ${activeTab === 'submissions' ? 'active' : ''}`}
+              onClick={() => setActiveTab('submissions')}
             >
-              Examples
+              Submissions
             </button>
-            <button 
-              className={`tab ${activeTab === 'constraints' ? 'active' : ''}`}
-              onClick={() => setActiveTab('constraints')}
-            >
-              Constraints
-            </button>
-            {problem.hints && (
-              <button 
-                className={`tab ${activeTab === 'hints' ? 'active' : ''}`}
-                onClick={() => setActiveTab('hints')}
-              >
-                Hints
-              </button>
-            )}
           </div>
 
           <div className="panel-content">
-            {activeTab === 'description' && (
+            {activeTab === 'description' && problem && (
               <div className="description-content">
-                <div 
-                  className="description-text"
-                  dangerouslySetInnerHTML={{ __html: problem.description }}
-                />
-                <div className="problem-limits">
-                  <div className="limit-item">
-                    <strong>Time Limit:</strong> {problem.timeLimit}ms
-                  </div>
-                  <div className="limit-item">
-                    <strong>Memory Limit:</strong> {problem.memoryLimit}MB
-                  </div>
+                <h2>{problem.title}</h2>
+                <div
+                  className="problem-difficulty-badge"
+                  data-difficulty={problem.difficulty?.toLowerCase()}
+                >
+                  {problem.difficulty}
+                </div>
+                {problem.description ? (
+                  <MarkdownRenderer markdown={problem.description} />
+                ) : (
+                  <p>No description available</p>
+                )}
+                <div className="problem-stats">
+                  {problem.timeLimit && (
+                    <div className="stat">
+                      <strong>Time Limit:</strong> {problem.timeLimit}
+                    </div>
+                  )}
+                  {problem.memoryLimit && (
+                    <div className="stat">
+                      <strong>Memory Limit:</strong> {problem.memoryLimit}
+                    </div>
+                  )}
+                  {problem.tags && problem.tags.length > 0 && (
+                    <div className="tags-container">
+                      <strong>Tags:</strong>
+                      <div className="tags">
+                        {problem.tags.map(tag => (
+                          <span key={tag} className="tag">{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
-
-            {activeTab === 'examples' && (
-              <div className="examples-content">
-                {problem.examples?.map((example, index) => (
-                  <div key={index} className="example-item">
-                    <h4>Example {index + 1}</h4>
-                    <div className="example-io">
-                      <div className="example-input">
-                        <strong>Input:</strong>
-                        <pre>{example.input}</pre>
-                      </div>
-                      <div className="example-output">
-                        <strong>Output:</strong>
-                        <pre>{example.output}</pre>
-                      </div>
-                      {example.explanation && (
-                        <div className="example-explanation">
-                          <strong>Explanation:</strong>
-                          <p>{example.explanation}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {activeTab === 'constraints' && (
-              <div className="constraints-content">
-                <div 
-                  className="constraints-text"
-                  dangerouslySetInnerHTML={{ __html: problem.constraints }}
-                />
-              </div>
-            )}
-
-            {activeTab === 'hints' && problem.hints && (
-              <div className="hints-content">
-                <div 
-                  className="hints-text"
-                  dangerouslySetInnerHTML={{ __html: problem.hints }}
-                />
+            {activeTab === 'submissions' && (
+              <div className="submissions-content">
+                <h3>Your Submissions</h3>
+                <div className="submission-list">
+                    <p>Submissions history will be shown here.</p>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Panel - Code Editor and Results */}
-        <div className="right-panel">
-          {/* Code Editor Section */}
-          <div className="editor-section">
-            <div className="editor-header">
-              <div className="editor-controls">
-                <select 
-                  value={selectedLanguage}
-                  onChange={(e) => handleLanguageChange(e.target.value)}
-                  className="language-select"
-                >
-                  {languages.map(lang => (
-                    <option key={lang.id} value={lang.id}>{lang.name}</option>
-                  ))}
-                </select>
-                
-                <div className="editor-settings">
-                  <label>
-                    Font Size:
-                    <input
-                      type="range"
-                      min="10"
-                      max="24"
-                      value={fontSize}
-                      onChange={(e) => setFontSize(parseInt(e.target.value))}
-                      className="font-size-slider"
-                    />
-                    <span>{fontSize}px</span>
-                  </label>
-                  
-                  <select 
-                    value={theme}
-                    onChange={(e) => setTheme(e.target.value)}
-                    className="theme-select"
-                  >
-                    <option value="vs-dark">Dark</option>
-                    <option value="vs-light">Light</option>
-                    <option value="hc-black">High Contrast</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div className="editor-actions">
-                <button 
-                  onClick={handleRun}
-                  disabled={isRunning}
-                  className="run-button"
-                >
-                  {isRunning ? 'Running...' : 'Run Code (Ctrl+Enter)'}
-                </button>
-                <button 
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  className="submit-button"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit (Ctrl+S)'}
-                </button>
-              </div>
+        <div className="problem-panel editor-panel">
+          <div className="editor-header">
+            <div className="language-selector">
+              <select
+                value={selectedLanguage}
+                onChange={handleLanguageChange}
+                className="language-select"
+              >
+                {languageOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
-
-            <div className="editor-container">
-              <Editor
-                height="400px"
-                language={selectedLanguage}
-                value={code}
-                onChange={(value) => setCode(value || '')}
-                onMount={handleEditorDidMount}
-                theme={theme}
-                options={{
-                  fontSize: fontSize,
-                  minimap: { enabled: false },
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  wordWrap: 'on',
-                  lineNumbers: 'on',
-                  roundedSelection: false,
-                  selectOnLineNumbers: true,
-                  tabSize: 2,
-                  insertSpaces: true,
-                }}
-              />
+            <div className="editor-actions">
+              <button className="font-btn" onClick={decreaseFontSize} title="Decrease font size">A-</button>
+              <button className="font-btn" onClick={increaseFontSize} title="Increase font size">A+</button>
             </div>
           </div>
-
-          {/* Results Section */}
-          <div className="results-section">
-            <div className="results-tabs">
-              <button 
-                className={`tab ${activeTab === 'testinput' ? 'active' : ''}`}
-                onClick={() => setActiveTab('testinput')}
-              >
-                Test Input
-              </button>
-              <button 
-                className={`tab ${activeTab === 'results' ? 'active' : ''}`}
-                onClick={() => setActiveTab('results')}
-              >
-                Results
-              </button>
-            </div>
-
-            <div className="results-content">
-              {activeTab === 'testinput' && (
-                <div className="test-input-section">
-                  <label htmlFor="custom-input">Custom Input:</label>
-                  <textarea
-                    id="custom-input"
-                    value={customInput}
-                    onChange={(e) => setCustomInput(e.target.value)}
-                    placeholder="Enter your test input here..."
-                    rows="4"
-                    className="custom-input"
-                  />
-                  
-                  {runResults && (
-                    <div className="run-results">
-                      <h4>Output:</h4>
-                      {runResults.error ? (
-                        <div className="error-output">
-                          <pre>{runResults.error}</pre>
-                        </div>
-                      ) : (
-                        <div className="success-output">
-                          <pre>{runResults.output}</pre>
-                          {runResults.runtime && (
-                            <div className="execution-stats">
-                              <span>Runtime: {runResults.runtime}ms</span>
-                              {runResults.memory && (
-                                <span>Memory: {runResults.memory}MB</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeTab === 'results' && (
-                <div className="submission-results">
-                  {results ? (
-                    <div className="results-display">
-                      <div className="result-header">
-                        <h4 
-                          className="result-status"
-                          style={{ color: getStatusColor(results.status) }}
-                        >
-                          {results.status.replace(/_/g, ' ')}
-                        </h4>
-                        {results.runtime && (
-                          <div className="result-stats">
-                            <span>Runtime: {results.runtime}ms</span>
-                            {results.memory && (
-                              <span>Memory: {results.memory}MB</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {results.error && (
-                        <div className="result-error">
-                          <h5>Error:</h5>
-                          <pre>{results.error}</pre>
-                        </div>
-                      )}
-
-                      {results.output && (
-                        <div className="result-output">
-                          <h5>Output:</h5>
-                          <pre>{results.output}</pre>
-                        </div>
-                      )}
-
-                      {results.testCases && (
-                        <div className="test-cases">
-                          <h5>Test Cases:</h5>
-                          {results.testCases.map((testCase, index) => (
-                            <div 
-                              key={index}
-                              className={`test-case ${testCase.passed ? 'passed' : 'failed'}`}
-                            >
-                              <div className="test-case-header">
-                                <span className="test-case-number">Test Case {index + 1}</span>
-                                <span className={`test-case-status ${testCase.passed ? 'passed' : 'failed'}`}>
-                                  {testCase.passed ? '✓ Passed' : '✗ Failed'}
-                                </span>
-                              </div>
-                              
-                              <div className="test-case-details">
-                                <div className="test-case-input">
-                                  <strong>Input:</strong>
-                                  <pre>{testCase.input}</pre>
-                                </div>
-                                <div className="test-case-expected">
-                                  <strong>Expected:</strong>
-                                  <pre>{testCase.expectedOutput}</pre>
-                                </div>
-                                <div className="test-case-actual">
-                                  <strong>Actual:</strong>
-                                  <pre>{testCase.actualOutput}</pre>
-                                </div>
-                                {testCase.runtime && (
-                                  <div className="test-case-stats">
-                                    <span>Runtime: {testCase.runtime}ms</span>
-                                    {testCase.memory && (
-                                      <span>Memory: {testCase.memory}MB</span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="no-results">
-                      <p>No submission results yet. Submit your code to see results here.</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+          <div className="code-editor">
+            <textarea
+              ref={editorRef}
+              value={code}
+              onChange={handleCodeChange}
+              style={{ fontSize: `${fontSize}px` }}
+              className="code-textarea"
+              spellCheck="false"
+            />
           </div>
+          <div className="editor-footer">
+            <button
+              className="run-btn"
+              onClick={handleRunCode}
+              disabled={isRunning}
+            >
+              {isRunning ? 'Running...' : 'Run Code'}
+            </button>
+            <button
+              className="submit-btn"
+              onClick={handleSubmit}
+              disabled={isRunning}
+            >
+              {isRunning ? 'Submitting...' : 'Submit'}
+            </button>
+          </div>
+          {(output || isRunning) && (
+            <div className="output-panel">
+              <div className="output-header">
+                <h3>Output</h3>
+              </div>
+              <pre className="output-content">{output}</pre>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, gql } from "@apollo/client";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import GoogleAuth from "../../components/GoogleAuth";
 import { useAuth } from "../../contexts/AuthContext";
 import "./Auth.css";
@@ -28,6 +28,8 @@ const SignIn = () => {
   const [signIn, { loading, error }] = useMutation(SIGN_IN);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectUrl = searchParams.get('redirect') || '/';
 
   const handleChange = (e) => {
     setFormData({
@@ -68,7 +70,7 @@ const SignIn = () => {
     });
 
     if (result.success) {
-      navigate("/");
+      navigate(redirectUrl);
     }
   };
 

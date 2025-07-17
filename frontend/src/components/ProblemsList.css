@@ -278,6 +278,12 @@
   width: 100%;
 }
 
+.problem-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
 .problem-card {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -762,6 +768,10 @@
     grid-template-columns: 1fr 1fr;
     gap: 2rem;
   }
+
+    .problem-link {
+      color: #e2e8f0;
+    }
 
   .problems-container h2 {
     grid-column: 1 / -1;
